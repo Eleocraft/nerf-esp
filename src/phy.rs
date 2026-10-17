@@ -1,9 +1,11 @@
 use core::task::{Context, Poll};
 
 use embassy_time::{Duration, Timer};
-use esp_hal::ethernet::{mac::{Duplex, LinkState, Speed}, phy::{MdioBus, Phy, PhyError, generic::GenericPhy}};
+use esp_hal::ethernet::{
+    mac::{Duplex, LinkState, Speed},
+    phy::{MdioBus, Phy, PhyError, generic::GenericPhy},
+};
 use futures_util::FutureExt;
-
 
 /// A custom PHY implementation that wraps [`GenericPhy`], and uses embassy-time
 /// to implement polling instead of the busy looping done by GenericPhy.

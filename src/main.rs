@@ -64,6 +64,11 @@ const NATS_MSG_CHANNEL_SIZE: usize = 3;
 static MSG_CH: embassy_nats::MsgChannel<NatsCollections, NATS_MSG_CHANNEL_SIZE> =
     embassy_nats::MsgChannel::new();
 
+// Servo settings
+const REST_POS_US: u16 = 1000;
+const ACTIVE_POS_US: u16 = 1400;
+const ACTIVE_TIME: Duration = Duration::from_secs(1);
+
 #[embassy_executor::task]
 async fn net_task(mut runner: Runner<'static, EthDevice>) {
     runner.run().await
@@ -71,7 +76,12 @@ async fn net_task(mut runner: Runner<'static, EthDevice>) {
 
 #[embassy_executor::task]
 async fn nats_task(
-    mut runner: embassy_nats::Runner<'static, NatsCollections, embassy_nats::UserPwdAuthenticator, NATS_NUM_SUBS>,
+    mut runner: embassy_nats::Runner<
+        'static,
+        NatsCollections,
+        embassy_nats::UserPwdAuthenticator,
+        NATS_NUM_SUBS,
+    >,
 ) -> ! {
     runner.run().await
 }
@@ -96,24 +106,22 @@ async fn main(spawner: Spawner) -> ! {
     // init rtos
     let timg0 = TimerGroup::new(p.TIMG0);
     esp_rtos::start(timg0.timer0, p.FROM_CPU_INTR0);
-    
-    // ── PHY reset ─────────────────────────────────────────────────────────────
-    // Assert reset for at least 100 ms, then release and wait ≥ 300 ms for the PHY to stabilise.
-    let mut phy_reset = Output::new(p.GPIO5, Level::Low, OutputConfig::default());
 
-    Timer::after(Duration::from_millis(100)).await;
-    phy_reset.set_high();
-    Timer::after(Duration::from_millis(300)).await;
+    info!("Initialized");
+
+    // ── Enable eth clock ─────────────────────────────────────────────────────
+    let mut _eth_clk_enable = Output::new(p.GPIO16, Level::High, OutputConfig::default());
+    // waiting for phy to initialize
+    Timer::after_millis(100).await;
 
     // ── Ethernet ─────────────────────────────────────────────────────────────
-
     let eth: EthDevice = Ethernet::new(
         p.ETH,
         STORAGE.take(),
         MAC_ADDR,
         AsyncPhy::new_auto(),
         RmiiPinBundle {
-            clock: ExternalRefClock::new(p.GPIO0), // REF_CLK from IP101GRI REFCLKO
+            clock: ExternalRefClock::new(p.GPIO0), // REF_CLK on WT32-S1
             rxd0: p.GPIO25,
             rxd1: p.GPIO26,
             rx_dv: p.GPIO27,
@@ -126,7 +134,7 @@ async fn main(spawner: Spawner) -> ! {
     )
     .expect("Ethernet init failed")
     .into_async();
-    
+
     // ── Network stack ─────────────────────────────────────────────────────────
 
     let config = embassy_net::Config::dhcpv4(Default::default());
@@ -141,12 +149,14 @@ async fn main(spawner: Spawner) -> ! {
         seed,
     );
 
+    info!("Stack created");
+
     // launch network task
     spawner.spawn(net_task(runner).unwrap());
 
     // ── Wait for DHCP ─────────────────────────────────────────────────────────
 
-    info!("Waiting for DHCP lease…");
+    info!("Waiting for DHCP lease...");
 
     stack.wait_config_up().await;
 
@@ -154,7 +164,7 @@ async fn main(spawner: Spawner) -> ! {
         info!("IP:      {}", cfg.address);
         info!("Gateway: {:?}", cfg.gateway);
     }
-    
+
     // ── Connect to NATS ───────────────────────────────────────────────────────
 
     let socket = TcpSocket::new(
@@ -182,10 +192,8 @@ async fn main(spawner: Spawner) -> ! {
     // launch nats task
     spawner.spawn(nats_task(runner).unwrap());
 
-    client.subscribe(
-        heapless::String::try_from("nerf.trigger").unwrap(),
-        &MSG_CH,
-        )
+    client
+        .subscribe(heapless::String::try_from("nerf.trigger").unwrap(), &MSG_CH)
         .await
         .unwrap();
 
@@ -195,7 +203,7 @@ async fn main(spawner: Spawner) -> ! {
 
     // connect op0 to timer0
     pwm.operator0.set_timer(&pwm.timer0);
-    
+
     // connect op0 to pin
     let mut pwm_pin = pwm
         .operator0
@@ -209,20 +217,19 @@ async fn main(spawner: Spawner) -> ! {
 
     // start timer0
     pwm.timer0.start(timer_clock_cfg);
-    
+
     info!("Running");
+
     loop {
-        
         if b"FIRE" != client.receive().await.data.as_slice() {
             continue;
         }
 
         info!("Fire!");
 
-        pwm_pin.set_timestamp(1000);
-        Timer::after_secs(3).await;
+        pwm_pin.set_timestamp(ACTIVE_POS_US);
+        Timer::after(ACTIVE_TIME).await;
 
-        pwm_pin.set_timestamp(1300);
-        Timer::after_secs(1).await;
+        pwm_pin.set_timestamp(REST_POS_US);
     }
 }
