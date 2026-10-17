@@ -1,0 +1,38 @@
+[package]
+edition      = "2024"
+name         = "nerf-esp"
+version      = "0.1.0"
+
+[dependencies]
+esp-hal = { version = "~1.2.2", features = ["defmt", "unstable", "esp32"] }
+
+defmt                  = "1.0.1"
+esp-bootloader-esp-idf = { version = "0.6.0", features = ["defmt", "esp32"] }
+
+critical-section = "1.2.0"
+esp-println      = { version = "0.18.0", features = ["defmt-espflash", "esp32"] }
+esp-backtrace    = { version = "0.20.0", features = ["panic-handler", "defmt", "esp32"] }
+
+esp-rtos         = { version = "0.4.0", features = ["embassy", "defmt", "esp32"] }
+embassy-executor = { version = "0.10.0", features = ["defmt"] }
+embassy-time     = { version = "0.5.0" }
+embassy-net      = { version = "0.9.0", features = ["dhcpv4", "medium-ethernet", "tcp", "dns"] }
+
+embassy-nats = { git = "https://github.com/S2outh/embassy-nats.git", features = ["defmt", "critical-section-mutex"] }
+
+futures-util = { version = "0.3.34", default-features = false }
+
+static_cell = "2.1.1"
+heapless = "0.9.3"
+
+# For fine tuning these settings, please refer to https://doc.rust-lang.org/cargo/reference/profiles.html
+[profile.dev]
+# The default debug profile is too slow and too big for resource-constrained devices.
+# Always build with some optimizations enabled.
+opt-level = "s"
+
+[profile.release]
+codegen-units = 1     # LLVM can perform better optimizations using a single thread
+debug         = 2     # prefer slower builds but better debugging experience
+lto           = 'fat'
+opt-level     = 's'

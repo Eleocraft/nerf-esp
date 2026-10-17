@@ -1,0 +1,5 @@
+# Keep user/runtime configuration values in this file.
+[env]
+# Board is an ESP32 rev v1.1; esp-hal defaults to requiring v3.0 (major*100 + minor)
+ESP_HAL_CONFIG_MIN_CHIP_REVISION = "100"
+DEFMT_LOG = "info"
