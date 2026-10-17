@@ -218,6 +218,8 @@ async fn main(spawner: Spawner) -> ! {
     // start timer0
     pwm.timer0.start(timer_clock_cfg);
 
+    pwm_pin.set_timestamp(REST_POS_US);
+
     info!("Running");
 
     loop {
