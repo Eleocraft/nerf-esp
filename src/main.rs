@@ -65,9 +65,13 @@ static MSG_CH: embassy_nats::MsgChannel<NatsCollections, NATS_MSG_CHANNEL_SIZE> 
     embassy_nats::MsgChannel::new();
 
 // Servo settings
-const REST_POS_US: u16 = 1000;
-const ACTIVE_POS_US: u16 = 1400;
+const REST_POS_US: u16 = 2000;
+const ACTIVE_POS_US: u16 = 1200;
 const ACTIVE_TIME: Duration = Duration::from_secs(1);
+
+// Trigger settings
+const TRIGGER_ADDR: &str = "nerf.trigger";
+const TRIGGER_MSG: &[u8; 4] = b"FIRE";
 
 #[embassy_executor::task]
 async fn net_task(mut runner: Runner<'static, EthDevice>) {
@@ -193,7 +197,7 @@ async fn main(spawner: Spawner) -> ! {
     spawner.spawn(nats_task(runner).unwrap());
 
     client
-        .subscribe(heapless::String::try_from("nerf.trigger").unwrap(), &MSG_CH)
+        .subscribe(heapless::String::try_from(TRIGGER_ADDR).unwrap(), &MSG_CH)
         .await
         .unwrap();
 
@@ -223,7 +227,7 @@ async fn main(spawner: Spawner) -> ! {
     info!("Running");
 
     loop {
-        if b"FIRE" != client.receive().await.data.as_slice() {
+        if TRIGGER_MSG != client.receive().await.data.as_slice() {
             continue;
         }
 
